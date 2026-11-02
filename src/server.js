@@ -1,7 +1,8 @@
 import express from "express";
 import dotenv from "dotenv";
-import { connectRedis } from "./config/redis.js";
+import { connectRedis,checkRedisSearch } from "./config/redis.js";
 import llmRoutes from "./routes/llmRoutes.js";
+import { createVectorIndex } from "./services/vectorStore.js";
 
 dotenv.config();
 
@@ -21,7 +22,8 @@ const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
     await connectRedis();
-
+    await checkRedisSearch();
+    await createVectorIndex();
     app.listen(PORT, () => {
         console.log(`Server running on port ${PORT}`);
     });

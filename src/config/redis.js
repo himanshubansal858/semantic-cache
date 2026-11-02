@@ -33,3 +33,21 @@ export const getRedisClient = () => {
 
     return redisClient;
 };
+
+
+export const checkRedisSearch = async () => {
+    try {
+        const client = getRedisClient();
+
+        const result = await client.sendCommand(["FT._LIST"]);
+
+        console.log("Redis Search is available!");
+        console.log("Existing indexes:", result);
+
+        return result;
+
+    } catch (error) {
+        console.error("Redis Search check failed:", error.message);
+        throw error;
+    }
+};
