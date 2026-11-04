@@ -139,7 +139,7 @@ export const searchSimilarCache = async (embedding) => {
         const attributes = matchedEntry.extra_attributes;
 
         const distance = Number(attributes.distance);
-        const similarity = 1 - distance;
+        const similarity = Math.max(0, Math.min(1, 1 - distance));
 
         return {
             key: matchedEntry.id,
