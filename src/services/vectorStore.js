@@ -65,6 +65,8 @@ export const storeCacheEntry = async (question, answer, embedding) => {
             answer,
             embedding: embeddingBuffer
         });
+        // Set cache expiration to 24 hours
+        await client.expire(key, 86400);
 
         console.log("Cache entry stored:", key);
 
@@ -178,4 +180,17 @@ export const findCacheMatch = async (embedding) => {
         similarity: match.similarity,
         message: "Similarity below threshold"
     };
+};
+export const deleteCacheEntry = async (key) => {
+    try {
+        const client = getRedisClient();
+
+        const result = await client.del(key);
+
+        return result === 1;
+
+    } catch (error) {
+        console.error("Cache deletion error:", error.message);
+        throw error;
+    }
 };
