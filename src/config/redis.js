@@ -2,14 +2,19 @@ import { createClient } from "redis";
 
 let redisClient;
 
+
 export const connectRedis = async () => {
     try {
         redisClient = createClient({
-            url: process.env.REDIS_URL
+            url: process.env.REDIS_URL,
+            socket: {
+                connectTimeout: 5000,
+                reconnectStrategy: false
+            }
         });
 
         redisClient.on("error", (err) => {
-            console.error("Redis Client Error:", err);
+            console.error("Redis Client Error:", err.message);
         });
 
         await redisClient.connect();
@@ -18,11 +23,14 @@ export const connectRedis = async () => {
 
         console.log("Redis connected successfully:", response);
 
-        return redisClient;
+        return true;
 
     } catch (error) {
         console.error("Redis connection failed:", error.message);
-        process.exit(1);
+
+        redisClient = null;
+
+        return false;
     }
 };
 

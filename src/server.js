@@ -20,10 +20,26 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
+
 const startServer = async () => {
-    await connectRedis();
-    await checkRedisSearch();
-    await createVectorIndex();
+    const redisConnected = await connectRedis();
+
+    if (redisConnected) {
+        try {
+            await checkRedisSearch();
+            await createVectorIndex();
+        } catch (error) {
+            console.error(
+                "Redis initialization failed:",
+                error.message
+            );
+        }
+    } else {
+        console.log(
+            "Starting without Redis. Cache will be unavailable."
+        );
+    }
+
     app.listen(PORT, () => {
         console.log(`Server running on port ${PORT}`);
     });
