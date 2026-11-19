@@ -194,3 +194,109 @@ export const deleteCacheEntry = async (key) => {
         throw error;
     }
 };
+
+export const acquireCacheLock = async (lockKey, token) => {
+    const client = getRedisClient();
+
+    const result = await client.set(lockKey, token, {
+        NX: true,
+        PX: 30000
+    });
+
+    return result === "OK";
+};
+
+export const releaseCacheLock = async (lockKey, token) => {
+    const client = getRedisClient();
+
+    const result = await client.sendCommand([
+        "EVAL",
+        `
+        if redis.call("GET", KEYS[1]) == ARGV[1] then
+            return redis.call("DEL", KEYS[1])
+        else
+            return 0
+        end
+        `,
+        "1",
+        lockKey,
+        token
+    ]);
+
+    return result === 1;
+};
+
+export const renewCacheLock = async (lockKey, token) => {
+    const client = getRedisClient();
+
+    const result = await client.sendCommand([
+        "EVAL",
+        `
+        if redis.call("GET", KEYS[1]) == ARGV[1] then
+            return redis.call("PEXPIRE", KEYS[1], ARGV[2])
+        else
+            return 0
+        end
+        `,
+        "1",
+        lockKey,
+        token,
+        "30000"
+    ]);
+
+    return result === 1;
+};
+
+export const storeCacheEntryWithLock = async (
+    question,
+    answer,
+    embedding,
+    lockKey,
+    lockToken
+) => {
+    const client = getRedisClient();
+
+    if (!question?.trim() || !answer?.trim()) {
+        throw new Error("Question and answer are required");
+    }
+
+    if (embedding?.length !== 768) {
+        throw new Error("Embedding must contain 768 values");
+    }
+
+    const cacheKey = `cache:${randomUUID()}`;
+
+    const embeddingBuffer = Buffer.from(
+        new Float32Array(embedding).buffer
+    );
+
+    const result = await client.sendCommand([
+        "EVAL",
+        `
+        if redis.call("GET", KEYS[1]) ~= ARGV[1] then
+            return 0
+        end
+
+        redis.call(
+            "HSET",
+            KEYS[2],
+            "question", ARGV[2],
+            "answer", ARGV[3],
+            "embedding", ARGV[4]
+        )
+
+        redis.call("EXPIRE", KEYS[2], 86400)
+
+        return 1
+        `,
+        "2",
+        lockKey,
+        cacheKey,
+        lockToken,
+        question,
+        answer,
+        embeddingBuffer
+    ]);
+
+    return result === 1 ? cacheKey : null;
+};

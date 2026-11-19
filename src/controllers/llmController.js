@@ -3,9 +3,61 @@ import { generateEmbedding } from "../services/embeddingService.js";
 import {
     findCacheMatch,
     storeCacheEntry,
-    deleteCacheEntry
+    deleteCacheEntry,
+    storeCacheEntryWithLock,
+    acquireCacheLock,
+    releaseCacheLock,
+    renewCacheLock
 } from "../services/vectorStore.js";
 
+import { randomUUID, createHash } from "node:crypto";
+const sleep = (ms) => {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+};
+const startLockRenewal = (lockKey, lockToken) => {
+    let lockLost = false;
+    let stopped = false;
+    let renewalInProgress = null;
+
+    const interval = setInterval(() => {
+        if (stopped || lockLost || renewalInProgress) {
+            return;
+        }
+
+        renewalInProgress = (async () => {
+            try {
+                const renewed = await renewCacheLock(
+                    lockKey,
+                    lockToken
+                );
+
+                if (!renewed) {
+                    lockLost = true;
+                    console.error("Redis lock ownership lost.");
+                }
+            } catch (error) {
+                lockLost = true;
+                console.error("Lock renewal failed:", error.message);
+            }
+        })().finally(() => {
+            renewalInProgress = null;
+        });
+
+    }, 10000);
+
+    return {
+        stop: async () => {
+            stopped = true;
+            clearInterval(interval);
+
+            if (renewalInProgress) {
+                await renewalInProgress;
+            }
+        },
+
+        isLockLost: () => lockLost
+    };
+};
 export const askQuestion = async (req, res) => {
     try {
         const { question } = req.body || {};
@@ -20,6 +72,10 @@ export const askQuestion = async (req, res) => {
         let embedding = null;
         let cacheResult = null;
         let redisAvailable = true;
+        let lockKey = null;
+        let lockToken = null;
+        let lockAcquired = false;
+        let cacheStored = false;
 
         // 1. Try generating the embedding
         try {
@@ -31,7 +87,7 @@ export const askQuestion = async (req, res) => {
         }
 
         // 2. Search Redis only if embedding generation succeeded
-        if (embedding) {
+        if (redisAvailable && embedding) {
             try {
                 cacheResult = await findCacheMatch(embedding);
 
@@ -53,34 +109,189 @@ export const askQuestion = async (req, res) => {
                 redisAvailable = false;
             }
         }
-
-        // 3. Generate answer through Gemini
-        const answer = await generateAnswer(question);
-
-        // 4. Store the result only if cache operations are available
+        // 3. Try acquiring a Redis lock
         if (redisAvailable && embedding) {
             try {
-                await storeCacheEntry(question, answer, embedding);
+                const normalizedQuestion = question.trim().toLowerCase();
+
+                const questionHash = createHash("sha256")
+                    .update(normalizedQuestion)
+                    .digest("hex");
+
+                lockKey = `lock:${questionHash}`;
+                lockToken = randomUUID();
+
+                lockAcquired = await acquireCacheLock(lockKey, lockToken);
+
+                if (lockAcquired) {
+                    console.log("Cache lock acquired:", lockKey);
+                } else {
+                    console.log("Another request is processing this question.");
+                }
 
             } catch (error) {
-                console.error("Cache storage failed:", error.message);
+                console.error("Lock acquisition failed:", error.message);
                 redisAvailable = false;
             }
         }
+        if (redisAvailable && embedding && !lockAcquired) {
+            for (let attempt = 0; attempt < 100; attempt++) {
+                await sleep(200);
 
-        // 5. Return the answer even if Redis failed
-        return res.status(200).json({
-            success: true,
-            question,
-            answer,
-            cache: {
-                hit: false,
-                redisAvailable,
-                message: redisAvailable
-                    ? "Answer generated and stored in cache"
-                    : "Answer generated without caching"
+                try {
+                    const match = await findCacheMatch(embedding);
+
+                    if (match.cacheHit) {
+                        return res.status(200).json({
+                            success: true,
+                            question,
+                            answer: match.answer,
+                            cache: {
+                                hit: true,
+                                similarity: match.similarity,
+                                redisAvailable: true
+                            }
+                        });
+                    }
+
+                    // Try to acquire the lock again
+                    lockAcquired = await acquireCacheLock(lockKey, lockToken);
+
+                    if (lockAcquired) {
+                        console.log("Cache lock acquired after waiting.");
+                        break;
+                    }
+
+                } catch (error) {
+                    console.error("Lock retry failed:", error.message);
+                    redisAvailable = false;
+                    break;
+                }
             }
-        });
+        }
+        // Stop if another request still owns the lock
+        if (redisAvailable && embedding && !lockAcquired) {
+            return res.status(503).json({
+                success: false,
+                message: "This question is already being processed. Please retry shortly."
+            });
+        }
+        // Start renewing the lock while processing
+        const lockRenewal = lockAcquired
+            ? startLockRenewal(lockKey, lockToken)
+            : null;
+        try {
+            // Recheck the cache after acquiring the lock
+            if (redisAvailable && embedding && lockAcquired) {
+                try {
+                    const match = await findCacheMatch(embedding);
+
+                    if (match.cacheHit) {
+                        return res.status(200).json({
+                            success: true,
+                            question,
+                            answer: match.answer,
+                            cache: {
+                                hit: true,
+                                similarity: match.similarity,
+                                redisAvailable: true
+                            }
+                        });
+                    }
+                } catch (error) {
+                    console.error("Cache recheck failed:", error.message);
+                    redisAvailable = false;
+                }
+            }
+
+            // Generate an answer through Gemini
+            let answer = await generateAnswer(question);
+            // Check whether lock renewal failed
+            if (lockRenewal?.isLockLost()) {
+                console.error("Lock ownership lost. Skipping cache operations.");
+                redisAvailable = false;
+            }
+            // 4. Check Redis again before storing
+            if (redisAvailable && embedding) {
+                try {
+                    const existingMatch = await findCacheMatch(embedding);
+
+                    if (existingMatch.cacheHit) {
+                        // Another request may have stored a similar entry
+                        answer = existingMatch.answer;
+
+                        console.log(
+                            "Duplicate cache entry detected. Skipping storage."
+                        );
+
+                    } else {
+                        if (lockAcquired) {
+                            const storedKey = await storeCacheEntryWithLock(
+                                question,
+                                answer,
+                                embedding,
+                                lockKey,
+                                lockToken
+                            );
+
+                            if (storedKey) {
+                                cacheStored = true;
+                                console.log("Cache entry stored:", storedKey);
+                            } else {
+                                console.log(
+                                    "Cache storage skipped because lock ownership was lost."
+                                );
+                            }
+                        } else {
+                            console.log("Cache storage skipped: no Redis lock.");
+                        }
+                    }
+
+                } catch (error) {
+                    console.error("Cache storage/deduplication failed:", error.message);
+                    redisAvailable = false;
+                }
+            }
+
+
+            // 5. Return the answer even if Redis failed
+            return res.status(200).json({
+                success: true,
+                question,
+                answer,
+                cache: {
+                    hit: false,
+                    stored: cacheStored,
+                    redisAvailable,
+                    message: !redisAvailable
+                        ? "Answer generated without caching"
+                        : cacheStored
+                            ? "Answer generated and stored in cache"
+                            : "Answer returned without creating a new cache entry"
+                }
+            });
+        } finally {
+            // Stop automatic lock renewal
+            if (lockRenewal) {
+                await lockRenewal.stop();
+            }
+
+            // Release the Redis lock
+            if (lockAcquired) {
+                try {
+                    const released = await releaseCacheLock(lockKey, lockToken);
+
+                    if (released) {
+                        console.log("Cache lock released:", lockKey);
+                    } else {
+                        console.log("Lock was already expired or ownership changed.");
+                    }
+
+                } catch (error) {
+                    console.error("Failed to release cache lock:", error.message);
+                }
+            }
+        }
 
     } catch (error) {
         console.error("Controller Error:", error.message);
