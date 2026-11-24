@@ -3,6 +3,8 @@ import dotenv from "dotenv";
 import { connectRedis,checkRedisSearch } from "./config/redis.js";
 import llmRoutes from "./routes/llmRoutes.js";
 import { createVectorIndex } from "./services/vectorStore.js";
+import analyticsRoutes from "./routes/analyticsRoutes.js";
+import { trackResponseTime } from "./middleware/responseTime.js";
 
 dotenv.config();
 
@@ -10,7 +12,9 @@ const app = express();
 
 app.use(express.json());
 
+app.use("/api/ask", trackResponseTime);
 app.use("/api", llmRoutes);
+app.use("/api/analytics", analyticsRoutes);
 
 app.get("/", (req, res) => {
     res.status(200).json({

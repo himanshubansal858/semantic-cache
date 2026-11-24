@@ -1,4 +1,4 @@
-import { generateAnswer } from "../services/llmService.js";
+import { generateAnswerWithRetry } from "../services/llmService.js";
 import { generateEmbedding } from "../services/embeddingService.js";
 import {
     findCacheMatch,
@@ -9,8 +9,12 @@ import {
     releaseCacheLock,
     renewCacheLock
 } from "../services/vectorStore.js";
-
 import { randomUUID, createHash } from "node:crypto";
+import {
+    incrementMetric,
+    METRIC_NAMES
+} from "../services/metricsService.js";
+
 const sleep = (ms) => {
     return new Promise((resolve) => setTimeout(resolve, ms));
 };
@@ -60,6 +64,7 @@ const startLockRenewal = (lockKey, lockToken) => {
 };
 export const askQuestion = async (req, res) => {
     try {
+        await incrementMetric(METRIC_NAMES.TOTAL_REQUESTS);
         const { question } = req.body || {};
 
         if (typeof question !== "string" || !question.trim()) {
@@ -92,6 +97,8 @@ export const askQuestion = async (req, res) => {
                 cacheResult = await findCacheMatch(embedding);
 
                 if (cacheResult.cacheHit) {
+                    await incrementMetric(METRIC_NAMES.CACHE_HITS);
+                    res.locals.cacheOutcome = "hit";
                     return res.status(200).json({
                         success: true,
                         question,
@@ -103,6 +110,8 @@ export const askQuestion = async (req, res) => {
                         }
                     });
                 }
+                // Initial lookup succeeded, but no suitable cached answer exists
+                await incrementMetric(METRIC_NAMES.CACHE_MISSES);
 
             } catch (error) {
                 console.error("Redis cache search failed:", error.message);
@@ -142,6 +151,8 @@ export const askQuestion = async (req, res) => {
                     const match = await findCacheMatch(embedding);
 
                     if (match.cacheHit) {
+                        await incrementMetric(METRIC_NAMES.CACHE_HITS);
+                        res.locals.cacheOutcome = "hit";
                         return res.status(200).json({
                             success: true,
                             question,
@@ -187,6 +198,8 @@ export const askQuestion = async (req, res) => {
                     const match = await findCacheMatch(embedding);
 
                     if (match.cacheHit) {
+                        await incrementMetric(METRIC_NAMES.CACHE_HITS);
+                        res.locals.cacheOutcome = "hit";
                         return res.status(200).json({
                             success: true,
                             question,
@@ -205,7 +218,7 @@ export const askQuestion = async (req, res) => {
             }
 
             // Generate an answer through Gemini
-            let answer = await generateAnswer(question);
+            let answer = await generateAnswerWithRetry(question);
             // Check whether lock renewal failed
             if (lockRenewal?.isLockLost()) {
                 console.error("Lock ownership lost. Skipping cache operations.");
@@ -255,6 +268,7 @@ export const askQuestion = async (req, res) => {
 
 
             // 5. Return the answer even if Redis failed
+            res.locals.cacheOutcome = "miss";
             return res.status(200).json({
                 success: true,
                 question,
@@ -296,9 +310,19 @@ export const askQuestion = async (req, res) => {
     } catch (error) {
         console.error("Controller Error:", error.message);
 
-        return res.status(500).json({
+        const errorText = String(error.message || "");
+
+        const isUnavailable =
+            error.status === 503 ||
+            error.code === 503 ||
+            /"code"\s*:\s*503/.test(errorText) ||
+            /UNAVAILABLE|high demand/i.test(errorText);
+
+        return res.status(isUnavailable ? 503 : 500).json({
             success: false,
-            message: error.message
+            message: isUnavailable
+                ? "AI service is temporarily unavailable. Please try again later."
+                : "Unable to process your request."
         });
     }
 };
