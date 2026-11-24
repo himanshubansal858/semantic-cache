@@ -1,0 +1,41 @@
+{
+  "datasetSize": 10,
+  "embeddingThreshold": 0.9,
+  "embedding": {
+    "evaluated": 10,
+    "errors": 0,
+    "tp": 5,
+    "tn": 1,
+    "fp": 3,
+    "fn": 1,
+    "accuracy": 60,
+    "precision": 62.5,
+    "recall": 83.33,
+    "f1": 71.43
+  },
+  "exactMatch": {
+    "evaluated": 10,
+    "errors": 0,
+    "tp": 0,
+    "tn": 4,
+    "fp": 0,
+    "fn": 6,
+    "accuracy": 40,
+    "precision": null,
+    "recall": 0,
+    "f1": null
+  },
+  "llm": {
+    "evaluated": 9,
+    "errors": 1,
+    "tp": 4,
+    "tn": 4,
+    "fp": 0,
+    "fn": 1,
+    "accuracy": 88.89,
+    "precision": 100,
+    "recall": 80,
+    "f1": 88.89,
+    "averageLatencyMs": 9668.57
+  }
+}

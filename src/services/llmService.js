@@ -18,7 +18,7 @@ export const generateAnswer = async (question) => {
         const ai = new GoogleGenAI({
             apiKey: apiKey
         });
-        
+
         await incrementMetric(METRIC_NAMES.GEMINI_CALLS);
         const response = await ai.models.generateContent({
             model: "gemini-3.6-flash",
@@ -66,4 +66,7 @@ export const generateAnswerWithRetry = async (question) => {
             await sleep(delay);
         }
     }
+};
+export const generateValidationResponse = async (prompt) => {
+    return await generateAnswerWithRetry(prompt);
 };

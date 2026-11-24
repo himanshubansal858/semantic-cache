@@ -1,0 +1,62 @@
+[
+  {
+    "question1": "What is Java?",
+    "question2": "Explain the Java programming language.",
+    "expectedMatch": true,
+    "similarity": 0.9340510284667045
+  },
+  {
+    "question1": "What is a binary tree?",
+    "question2": "Define a binary tree.",
+    "expectedMatch": true,
+    "similarity": 0.9801470120541652
+  },
+  {
+    "question1": "What is a binary tree?",
+    "question2": "What is a binary search tree?",
+    "expectedMatch": false,
+    "similarity": 0.9610236089993837
+  },
+  {
+    "question1": "Explain breadth-first search.",
+    "question2": "What is BFS in graph traversal?",
+    "expectedMatch": true,
+    "similarity": 0.923785857521208
+  },
+  {
+    "question1": "Explain breadth-first search.",
+    "question2": "Explain depth-first search.",
+    "expectedMatch": false,
+    "similarity": 0.9272660314974956
+  },
+  {
+    "question1": "What is a stack data structure?",
+    "question2": "Explain the LIFO principle of stacks.",
+    "expectedMatch": true,
+    "similarity": 0.8854406064942303
+  },
+  {
+    "question1": "What is a stack data structure?",
+    "question2": "What is a queue data structure?",
+    "expectedMatch": false,
+    "similarity": 0.9102518038293668
+  },
+  {
+    "question1": "What is SQL?",
+    "question2": "Explain Structured Query Language.",
+    "expectedMatch": true,
+    "similarity": 0.9396063786946578
+  },
+  {
+    "question1": "What is SQL?",
+    "question2": "What is NoSQL?",
+    "expectedMatch": false,
+    "similarity": 0.887432077625426
+  },
+  {
+    "question1": "What is process synchronization?",
+    "question2": "Explain synchronization between concurrent processes.",
+    "expectedMatch": true,
+    "similarity": 0.9510421568953444
+  }
+]
