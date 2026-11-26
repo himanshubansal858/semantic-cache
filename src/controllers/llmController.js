@@ -9,6 +9,7 @@ import {
     releaseCacheLock,
     renewCacheLock
 } from "../services/vectorStore.js";
+import { validateQuestion } from "../utils/validateQuestion.js";
 import { randomUUID, createHash } from "node:crypto";
 import {
     incrementMetric,
@@ -65,14 +66,16 @@ const startLockRenewal = (lockKey, lockToken) => {
 export const askQuestion = async (req, res) => {
     try {
         await incrementMetric(METRIC_NAMES.TOTAL_REQUESTS);
-        const { question } = req.body || {};
+        const validation = validateQuestion(req.body?.question);
 
-        if (typeof question !== "string" || !question.trim()) {
+        if (!validation.valid) {
             return res.status(400).json({
                 success: false,
-                message: "A valid question is required"
+                message: validation.message
             });
         }
+
+        const question = validation.question;
 
         let embedding = null;
         let cacheResult = null;

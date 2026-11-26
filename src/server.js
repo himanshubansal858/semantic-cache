@@ -5,13 +5,17 @@ import llmRoutes from "./routes/llmRoutes.js";
 import { createVectorIndex } from "./services/vectorStore.js";
 import analyticsRoutes from "./routes/analyticsRoutes.js";
 import { trackResponseTime } from "./middleware/responseTime.js";
+import { askRateLimiter } from "./middleware/rateLimiter.js";
 
 dotenv.config();
 
 const app = express();
 
-app.use(express.json());
+app.use(express.json({
+    limit: "10kb"
+}));
 
+app.use("/api/ask", askRateLimiter);
 app.use("/api/ask", trackResponseTime);
 app.use("/api", llmRoutes);
 app.use("/api/analytics", analyticsRoutes);

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getRedisClient } from "../config/redis.js";
+import { evaluateCacheMatch } from "../utils/cacheDecision.js";
 
 const INDEX_NAME = "idx:semantic_cache";
 
@@ -157,29 +158,8 @@ export const searchSimilarCache = async (embedding) => {
 };
 
 export const findCacheMatch = async (embedding) => {
-    const SIMILARITY_THRESHOLD = 0.90;
-
     const match = await searchSimilarCache(embedding);
-
-    if (!match) {
-        return {
-            cacheHit: false,
-            message: "No matching cache entry found"
-        };
-    }
-
-    if (match.similarity >= SIMILARITY_THRESHOLD) {
-        return {
-            cacheHit: true,
-            ...match
-        };
-    }
-
-    return {
-        cacheHit: false,
-        similarity: match.similarity,
-        message: "Similarity below threshold"
-    };
+    return evaluateCacheMatch(match);
 };
 export const deleteCacheEntry = async (key) => {
     try {

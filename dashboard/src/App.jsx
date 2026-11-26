@@ -6,7 +6,7 @@ import {
   Zap,
   Clock3
 } from "lucide-react";
-
+import ApiPlayground from "./components/ApiPlayground";
 import {
   ResponsiveContainer,
   BarChart,
@@ -256,7 +256,7 @@ function App() {
             </div>
           </section>
         </div>
-
+        <ApiPlayground />
         <footer className="mt-10 text-center text-xs text-slate-500">
           Semantic Cache • Analytics Dashboard
         </footer>
