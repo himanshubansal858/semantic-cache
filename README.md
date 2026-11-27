@@ -1,3 +1,9 @@
+## Live Demo
+
+🌐 [Semantic Cache Dashboard](https://semantic-cache-self.vercel.app)
+
+The backend is deployed on Render, with Redis Cloud
+for vector search and Gemini for answer generation.
 # Semantic Cache
 
 **Answer-aware semantic caching for LLM responses using Redis vector search, Google Gemini, Node.js, and React.**
