@@ -1,11 +1,11 @@
 import { generateAnswerWithRetry } from "../services/llmService.js";
 import { generateEmbedding } from "../services/embeddingService.js";
 import {
-    findCacheMatch,
     storeCacheEntry,
     deleteCacheEntry,
     storeCacheEntryWithLock,
     acquireCacheLock,
+    findVerifiedCacheMatch,
     releaseCacheLock,
     renewCacheLock
 } from "../services/vectorStore.js";
@@ -97,7 +97,28 @@ export const askQuestion = async (req, res) => {
         // 2. Search Redis only if embedding generation succeeded
         if (redisAvailable && embedding) {
             try {
-                cacheResult = await findCacheMatch(embedding);
+
+                cacheResult = await findVerifiedCacheMatch(
+                    embedding,
+                    question,
+                    async (
+                        cachedQuestion,
+                        incomingQuestion,
+                        cachedAnswer,
+                        remainingMs
+                    ) => {
+                        const { validateCachedAnswer } = await import(
+                            "../services/answerAwareValidator.js"
+                        );
+
+                        return validateCachedAnswer(
+                            cachedQuestion,
+                            incomingQuestion,
+                            cachedAnswer,
+                            remainingMs
+                        );
+                    }
+                );
 
                 if (cacheResult.cacheHit) {
                     await incrementMetric(METRIC_NAMES.CACHE_HITS);
@@ -151,7 +172,10 @@ export const askQuestion = async (req, res) => {
                 await sleep(200);
 
                 try {
-                    const match = await findCacheMatch(embedding);
+                    const match = await findVerifiedCacheMatch(
+                        embedding,
+                        question
+                    );
 
                     if (match.cacheHit) {
                         await incrementMetric(METRIC_NAMES.CACHE_HITS);
@@ -198,7 +222,10 @@ export const askQuestion = async (req, res) => {
             // Recheck the cache after acquiring the lock
             if (redisAvailable && embedding && lockAcquired) {
                 try {
-                    const match = await findCacheMatch(embedding);
+                    const match = await findVerifiedCacheMatch(
+                        embedding,
+                        question
+                    );
 
                     if (match.cacheHit) {
                         await incrementMetric(METRIC_NAMES.CACHE_HITS);
@@ -230,14 +257,19 @@ export const askQuestion = async (req, res) => {
             // 4. Check Redis again before storing
             if (redisAvailable && embedding) {
                 try {
-                    const existingMatch = await findCacheMatch(embedding);
+
+                    const existingMatch = await findVerifiedCacheMatch(
+                        embedding,
+                        question
+                        // No semantic validator: only exact normalized matches
+                        // can be accepted here.
+                    );
 
                     if (existingMatch.cacheHit) {
-                        // Another request may have stored a similar entry
-                        answer = existingMatch.answer;
-
+                        // An identical question is already cached.
+                        // Keep the newly generated answer unchanged.
                         console.log(
-                            "Duplicate cache entry detected. Skipping storage."
+                            "Exact duplicate cache entry detected. Skipping storage."
                         );
 
                     } else {

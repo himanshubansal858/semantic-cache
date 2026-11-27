@@ -42,6 +42,7 @@ mock.module(service("../src/services/metricsService.js"), {
     }
 });
 
+
 mock.module(service("../src/services/vectorStore.js"), {
     exports: {
         findCacheMatch: async () => {
@@ -50,6 +51,14 @@ mock.module(service("../src/services/vectorStore.js"), {
             }
             return { cacheHit: false };
         },
+
+        findVerifiedCacheMatch: async () => {
+            if (searchFails) {
+                throw new Error("Redis unavailable");
+            }
+            return { cacheHit: false };
+        },
+
         storeCacheEntry: async () => null,
         deleteCacheEntry: async () => false,
         storeCacheEntryWithLock: async () => null,
@@ -58,6 +67,7 @@ mock.module(service("../src/services/vectorStore.js"), {
         renewCacheLock: async () => true
     }
 });
+
 
 const { askQuestion } = await import(
     "../src/controllers/llmController.js"

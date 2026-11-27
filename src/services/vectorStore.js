@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { getRedisClient } from "../config/redis.js";
 import { evaluateCacheMatch } from "../utils/cacheDecision.js";
+import {
+    selectVerifiedCandidate
+} from "../utils/selectVerifiedCandidate.js";
 
 const INDEX_NAME = "idx:semantic_cache";
 
@@ -118,7 +121,7 @@ export const searchSimilarCache = async (embedding) => {
         const result = await client.sendCommand([
             "FT.SEARCH",
             INDEX_NAME,
-            "*=>[KNN 1 @embedding $query_vector AS distance]",
+            "*=>[KNN 3 @embedding $query_vector AS distance]",
             "PARAMS",
             "2",
             "query_vector",
@@ -134,22 +137,29 @@ export const searchSimilarCache = async (embedding) => {
             "2"
         ]);
 
-        if (result.total_results === 0) {
-            return null;
+
+        if (!result.results?.length) {
+            return [];
         }
 
-        const matchedEntry = result.results[0];
-        const attributes = matchedEntry.extra_attributes;
+        return result.results.map((entry) => {
+            const attributes = entry.extra_attributes;
+            const distance = Number(attributes.distance);
 
-        const distance = Number(attributes.distance);
-        const similarity = Math.max(0, Math.min(1, 1 - distance));
+            if (!Number.isFinite(distance)) {
+                throw new Error("Invalid vector distance returned by Redis");
+            }
 
-        return {
-            key: matchedEntry.id,
-            question: attributes.question,
-            answer: attributes.answer,
-            similarity
-        };
+            const similarity = Math.max(0, Math.min(1, 1 - distance));
+
+            return {
+                key: entry.id,
+                question: attributes.question,
+                answer: attributes.answer,
+                similarity
+            };
+        });
+
 
     } catch (error) {
         console.error("Vector search error:", error.message);
@@ -158,9 +168,37 @@ export const searchSimilarCache = async (embedding) => {
 };
 
 export const findCacheMatch = async (embedding) => {
-    const match = await searchSimilarCache(embedding);
-    return evaluateCacheMatch(match);
+    const candidates = await searchSimilarCache(embedding);
+
+    // Temporarily preserve the original nearest-match behavior.
+    const nearestMatch = candidates[0] ?? null;
+
+    return evaluateCacheMatch(nearestMatch);
 };
+
+export const findVerifiedCacheMatch = async (
+    embedding,
+    incomingQuestion,
+    semanticValidator
+) => {
+    if (
+        typeof incomingQuestion !== "string" ||
+        !incomingQuestion.trim()
+    ) {
+        throw new Error("Incoming question is required");
+    }
+
+    // Retrieve up to three candidates from Redis.
+    const candidates = await searchSimilarCache(embedding);
+
+    // Validate candidates using the existing verified selector.
+    return selectVerifiedCandidate(
+        incomingQuestion,
+        candidates,
+        semanticValidator
+    );
+};
+
 export const deleteCacheEntry = async (key) => {
     try {
         const client = getRedisClient();
