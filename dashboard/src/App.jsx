@@ -22,17 +22,17 @@ import { fetchAnalytics } from "./services/analyticsService";
 
 function MetricCard({ title, value, icon: Icon, subtitle }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151521] p-5">
+    <div className="rounded-2xl border border-[#e4e1db] bg-white p-5">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-400">{title}</p>
-        <Icon size={19} className="text-cyan-400" />
+        <p className="text-sm text-[#777d86]">{title}</p>
+        <Icon size={19} className="text-[#c87754]" />
       </div>
 
-      <h2 className="mt-4 text-3xl font-semibold text-white">
+      <h2 className="mt-4 text-3xl font-semibold text-[#252d3a]">
         {value}
       </h2>
 
-      <p className="mt-2 text-xs text-slate-500">
+      <p className="mt-2 text-xs text-[#858992]">
         {subtitle}
       </p>
     </div>
@@ -80,7 +80,7 @@ function App() {
   }, []);
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#09090f] text-white">
+      <div className="flex min-h-screen items-center justify-center bg-[#f7f5f0] text-[#252d3a]">
         Loading analytics...
       </div>
     );
@@ -88,7 +88,7 @@ function App() {
 
   if (error && !metrics) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#09090f] text-white">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#f7f5f0] text-[#252d3a]">
         <h2 className="text-xl font-semibold">
           Analytics unavailable
         </h2>
@@ -97,7 +97,7 @@ function App() {
           {error}
         </p>
 
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-[#777d86]">
           Retrying automatically every 5 seconds...
         </p>
       </div>
@@ -115,16 +115,16 @@ function App() {
     }
   ];
   return (
-    <div className="min-h-screen bg-[#09090f] text-white">
+    <div className="min-h-screen bg-[#f7f5f0] text-[#252d3a]">
       <div className="mx-auto max-w-7xl px-6 py-10">
         <header className="mb-10">
           <div className="flex items-center gap-3">
-            <Database size={30} className="text-cyan-400" />
+            <Database size={30} className="text-[#c87754]" />
             <h1 className="text-3xl font-bold">
               Semantic Cache
             </h1>
           </div>
-          <p className="mt-2 text-slate-400">
+          <p className="mt-2 text-[#777d86]">
             Real-time performance monitoring dashboard
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -143,7 +143,7 @@ function App() {
             </span>
 
             {lastUpdated && (
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-[#858992]">
                 Last updated: {lastUpdated.toLocaleTimeString()}
               </span>
             )}
@@ -171,10 +171,10 @@ function App() {
             subtitle={`${metrics.cacheHits} cache hits`}
           />
           <MetricCard
-            title="Gemini Calls"
-            value={metrics.geminiCalls}
+            title="LLM Calls"
+            value={metrics.llmCalls}
             icon={Zap}
-            subtitle="LLM requests"
+            subtitle="Groq API requests"
           />
           <MetricCard
             title="Speedup"
@@ -185,11 +185,11 @@ function App() {
         </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-3">
-          <section className="rounded-2xl border border-white/10 bg-[#151521] p-6 lg:col-span-2">
+          <section className="rounded-2xl border border-[#e4e1db] bg-white p-6 lg:col-span-2">
             <h2 className="text-lg font-semibold">
               Response Time Comparison
             </h2>
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="mt-1 text-sm text-[#777d86]">
               Average latency in milliseconds
             </p>
 
@@ -222,7 +222,7 @@ function App() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-white/10 bg-[#151521] p-6">
+          <section className="rounded-2xl border border-[#e4e1db] bg-white p-6">
             <h2 className="text-lg font-semibold">
               Cache Overview
             </h2>
@@ -230,12 +230,12 @@ function App() {
             <div className="mt-8 space-y-6">
               <div>
                 <div className="mb-2 flex justify-between text-sm">
-                  <span className="text-slate-400">Cache Hits</span>
+                  <span className="text-[#777d86]">Cache Hits</span>
                   <span>{metrics.cacheHits}</span>
                 </div>
-                <div className="h-2 rounded-full bg-slate-800">
+                <div className="h-2 rounded-full 	bg-[#ece8e2]">
                   <div
-                    className="h-2 rounded-full bg-cyan-400"
+                    className="h-2 rounded-full 	bg-[#c87754]"
                     style={{
                       width: `${metrics.cacheHitRate}%`
                     }}
@@ -244,12 +244,12 @@ function App() {
               </div>
 
               <div className="flex justify-between text-sm">
-                <span className="text-slate-400">Cache Misses</span>
+                <span className="text-[#777d86]">Cache Misses</span>
                 <span>{metrics.cacheMisses}</span>
               </div>
 
               <div className="flex justify-between text-sm">
-                <span className="text-slate-400">Failed Requests</span>
+                <span className="text-[#777d86]">Failed Requests</span>
                 <span>{metrics.failedRequests}</span>
               </div>
 
@@ -257,7 +257,7 @@ function App() {
           </section>
         </div>
         <ApiPlayground />
-        <footer className="mt-10 text-center text-xs text-slate-500">
+        <footer className="mt-10 text-center text-xs text-[#858992]">
           Semantic Cache • Analytics Dashboard
         </footer>
       </div>

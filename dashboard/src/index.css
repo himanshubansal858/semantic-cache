@@ -1,14 +1,28 @@
+
 @import "tailwindcss";
 
 :root {
   font-family: Inter, system-ui, sans-serif;
-  color-scheme: dark;
+  color-scheme: light;
+
+  --bg: #f7f5f0;
+  --surface: #ffffff;
+  --ink: #252d3a;
+  --muted: #777d86;
+  --border: #e4e1db;
+  --accent: #c87754;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: #09090f;
-  color: #f8fafc;
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: #f0d5c7;
+  color: #252d3a;
 }
