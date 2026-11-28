@@ -32,7 +32,7 @@ export const getMetrics = async () => {
             totalRequests: Number(metrics.totalRequests || 0),
             cacheHits: Number(metrics.cacheHits || 0),
             cacheMisses: Number(metrics.cacheMisses || 0),
-            geminiCalls: Number(metrics.geminiCalls || 0),
+            llmCalls: Number(metrics.llmCalls || 0),
             totalResponseTimeMs: Number(metrics.totalResponseTimeMs || 0),
             completedRequests: Number(metrics.completedRequests || 0),
             cacheHitResponseTimeMs: Number(
@@ -66,7 +66,7 @@ export const METRIC_NAMES = {
     TOTAL_REQUESTS: "totalRequests",
     CACHE_HITS: "cacheHits",
     CACHE_MISSES: "cacheMisses",
-    GEMINI_CALLS: "geminiCalls",
+    LLM_CALLS: "llmCalls",
     TOTAL_RESPONSE_TIME: "totalResponseTimeMs",
     COMPLETED_REQUESTS: "completedRequests",
     CACHE_HIT_RESPONSE_TIME: "cacheHitResponseTimeMs",

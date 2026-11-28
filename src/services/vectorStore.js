@@ -5,7 +5,16 @@ import {
     selectVerifiedCandidate
 } from "../utils/selectVerifiedCandidate.js";
 
-const INDEX_NAME = "idx:semantic_cache";
+const USE_LOCAL_EMBEDDINGS =
+    process.env.EMBEDDING_PROVIDER === "local";
+
+const INDEX_NAME = USE_LOCAL_EMBEDDINGS
+    ? "idx:semantic_cache_mpnet"
+    : "idx:semantic_cache";
+
+const CACHE_PREFIX = USE_LOCAL_EMBEDDINGS
+    ? "mpnet:cache:"
+    : "cache:";
 
 export const createVectorIndex = async () => {
     try {
@@ -24,7 +33,7 @@ export const createVectorIndex = async () => {
             "FT.CREATE",
             INDEX_NAME,
             "ON", "HASH",
-            "PREFIX", "1", "cache:",
+            "PREFIX", "1", CACHE_PREFIX,
             "SCHEMA",
             "question", "TEXT",
             "answer", "TEXT",
@@ -43,6 +52,37 @@ export const createVectorIndex = async () => {
     }
 };
 
+
+export const createLocalVectorIndex = async () => {
+    const client = getRedisClient();
+
+    const indexName = "idx:semantic_cache_mpnet";
+
+    const indexes = await client.sendCommand(["FT._LIST"]);
+
+    if (indexes.includes(indexName)) {
+        console.log("Local vector index already exists");
+        return;
+    }
+
+    await client.sendCommand([
+        "FT.CREATE",
+        indexName,
+        "ON", "HASH",
+        "PREFIX", "1", "mpnet:cache:",
+        "SCHEMA",
+        "question", "TEXT",
+        "answer", "TEXT",
+        "embedding", "VECTOR",
+        "FLAT", "6",
+        "TYPE", "FLOAT32",
+        "DIM", "768",
+        "DISTANCE_METRIC", "COSINE"
+    ]);
+
+    console.log("Local vector index created successfully");
+};
+
 export const storeCacheEntry = async (question, answer, embedding) => {
     try {
         const client = getRedisClient();
@@ -55,8 +95,7 @@ export const storeCacheEntry = async (question, answer, embedding) => {
             throw new Error("Embedding must contain 768 values");
         }
 
-        // Generate a unique Redis key
-        const key = `cache:${randomUUID()}`;
+        const key = `${CACHE_PREFIX}${randomUUID()}`;
 
         // Convert embedding into FLOAT32 binary data
         const embeddingBuffer = Buffer.from(
@@ -282,7 +321,7 @@ export const storeCacheEntryWithLock = async (
         throw new Error("Embedding must contain 768 values");
     }
 
-    const cacheKey = `cache:${randomUUID()}`;
+    const cacheKey = `${CACHE_PREFIX}${randomUUID()}`;
 
     const embeddingBuffer = Buffer.from(
         new Float32Array(embedding).buffer

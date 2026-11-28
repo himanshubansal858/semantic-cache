@@ -1,39 +1,82 @@
 
-import { GoogleGenAI } from "@google/genai";
 import {
     incrementMetric,
     METRIC_NAMES
 } from "./metricsService.js";
 
-export const generateAnswer = async (question) => {
-    try {
-        // Check whether the API key is available
-        const apiKey = process.env.GEMINI_API_KEY;
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-        if (!apiKey) {
-            throw new Error("GEMINI_API_KEY is missing from environment variables");
+const sleep = (ms) =>
+    new Promise(resolve => setTimeout(resolve, ms));
+
+export const generateAnswer = async (question) => {
+    const apiKey = process.env.GROQ_API_KEY;
+
+    if (!apiKey) {
+        throw new Error("GROQ_API_KEY is missing");
+    }
+
+    const model = process.env.GROQ_MODEL || "openai/gpt-oss-20b";
+
+    try {
+        const response = await fetch(GROQ_URL, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${apiKey}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                model,
+                messages: [
+                    {
+                        role: "system",
+                        content: "You are a helpful technical assistant. Provide accurate, clear, and complete answers. Keep explanations concise unless detailed information is requested."
+                    },
+                    {
+                        role: "user",
+                        content: question
+                    }
+                ],
+                temperature: 0.2,
+                reasoning_effort: "low",
+                max_completion_tokens: 4096
+            }),
+            signal: AbortSignal.timeout(30000)
+        });
+
+        await incrementMetric(METRIC_NAMES.LLM_CALLS);
+
+        if (!response.ok) {
+            const details = await response.text();
+            const error = new Error(
+                `Groq API error ${response.status}: ${details.slice(0, 300)}`
+            );
+
+            error.status = response.status;
+            throw error;
         }
 
-        // Initialize Gemini only when this function is called
-        const ai = new GoogleGenAI({
-            apiKey: apiKey
-        });
+        const data = await response.json();
+        const finishReason = data.choices?.[0]?.finish_reason;
 
-        await incrementMetric(METRIC_NAMES.GEMINI_CALLS);
-        const response = await ai.models.generateContent({
-            model: "gemini-3.6-flash",
-            contents: question
-        });
+        if (finishReason === "length") {
+            throw new Error(
+                "Groq response was truncated because the token limit was reached"
+            );
+        }
+        const answer = data.choices?.[0]?.message?.content;
 
-        return response.text;
+        if (!answer || !answer.trim()) {
+            throw new Error("Groq returned an empty answer");
+        }
+
+        return answer.trim();
 
     } catch (error) {
-        console.error("Gemini API Error:", error.message);
+        console.error("Groq API Error:", error.message);
         throw error;
     }
 };
-const sleep = (ms) =>
-    new Promise(resolve => setTimeout(resolve, ms));
 
 export const generateAnswerWithRetry = async (question) => {
     const MAX_ATTEMPTS = 3;
@@ -41,16 +84,11 @@ export const generateAnswerWithRetry = async (question) => {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
             return await generateAnswer(question);
-
         } catch (error) {
-            const errorText = String(error.message || "");
-
-            // Retry only temporary service failures
             const retryable =
                 error.status === 503 ||
-                error.code === 503 ||
-                /"code"\s*:\s*503/.test(errorText) ||
-                /UNAVAILABLE|high demand/i.test(errorText);
+                error.status === 502 ||
+                error.status === 504;
 
             if (!retryable || attempt === MAX_ATTEMPTS) {
                 throw error;
@@ -59,14 +97,14 @@ export const generateAnswerWithRetry = async (question) => {
             const delay = 1000 * (2 ** (attempt - 1));
 
             console.warn(
-                `Gemini unavailable. Attempt ${attempt}/${MAX_ATTEMPTS}. ` +
-                `Retrying in ${delay}ms...`
+                `Groq temporary failure. Retrying in ${delay}ms`
             );
 
             await sleep(delay);
         }
     }
 };
+
 export const generateValidationResponse = async (prompt) => {
     return await generateAnswerWithRetry(prompt);
 };

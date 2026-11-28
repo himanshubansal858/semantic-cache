@@ -1,11 +1,14 @@
 import { GoogleGenAI } from "@google/genai";
+import { generateLocalEmbedding } from "./localEmbeddingService.js";
 
 export const generateEmbedding = async (text) => {
     try {
         if (!text || !text.trim()) {
             throw new Error("Text is required to generate an embedding");
         }
-
+        if (process.env.EMBEDDING_PROVIDER === "local") {
+            return await generateLocalEmbedding(text);
+        }
         const apiKey = process.env.GEMINI_API_KEY;
 
         if (!apiKey) {
