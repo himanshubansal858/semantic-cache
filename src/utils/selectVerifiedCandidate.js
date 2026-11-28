@@ -5,7 +5,7 @@ export const selectVerifiedCandidate = async (
     incomingQuestion,
     candidates,
     semanticValidator = null,
-    threshold = 0.90
+    threshold = process.env.EMBEDDING_PROVIDER === "local" ? 0.75 : 0.90
 ) => {
     if (typeof incomingQuestion !== "string") {
         throw new TypeError("Incoming question must be a string");

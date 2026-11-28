@@ -1,5 +1,6 @@
 
-export const SIMILARITY_THRESHOLD = 0.90;
+export const SIMILARITY_THRESHOLD =
+    process.env.EMBEDDING_PROVIDER === "local" ? 0.75 : 0.90;
 
 export const evaluateCacheMatch = (match) => {
     if (!match) {

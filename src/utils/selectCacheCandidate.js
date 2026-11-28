@@ -2,7 +2,7 @@ export const selectCacheCandidate = async (
     incomingQuestion,
     candidates,
     validateMatch,
-    threshold = 0.90
+    threshold = process.env.EMBEDDING_PROVIDER === "local" ? 0.75 : 0.90
 ) => {
     if (!Array.isArray(candidates)) {
         throw new Error("Candidates must be an array");
