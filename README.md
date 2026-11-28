@@ -1,259 +1,453 @@
-## Live Demo
+# Semantic Cache — Intelligent Caching for LLM Applications
 
-🌐 [Semantic Cache Dashboard](https://semantic-cache-self.vercel.app)
+An AI-powered semantic caching system built to reduce redundant LLM requests, improve response latency, and make LLM-powered applications more efficient.
 
-The backend is deployed on Render, with Redis Cloud
-for vector search and Gemini for answer generation.
-# Semantic Cache
+Unlike traditional caching, which relies on exact string matching, Semantic Cache understands the meaning of questions using vector embeddings and cosine similarity. It can reuse previously generated answers when a new question is semantically equivalent to an existing cached query.
 
-**Answer-aware semantic caching for LLM responses using Redis vector search, Google Gemini, Node.js, and React.**
+The system also incorporates answer-aware validation, Redis distributed locking, fault-tolerant fallbacks, and a real-time analytics dashboard.
 
-Semantic Cache reduces redundant LLM generations by retrieving previously answered questions that are semantically similar to a new request. Rather than trusting cosine similarity alone, the project uses a hybrid validation pipeline that checks whether a cached answer is actually suitable for reuse.
+### Live Demo
 
-> **Project status:** Working development implementation. Backend regression tests pass (64 tests); live checks cover exact matches, a valid technical paraphrase, a known false-positive scenario, analytics, and concurrent requests. The answer-aware approach still needs larger-scale evaluation before production use.
+[**Try Semantic Cache**](https://semantic-cache-self.vercel.app)
 
-## Why this project?
+[**Backend API**](https://semantic-cache-api-xlem.onrender.com)
 
-Exact-string caching misses paraphrases:
+---
+
+## Why Semantic Cache?
+
+Consider two questions:
 
 - "What is a binary search tree?"
 - "Explain the binary search tree data structure."
 
-Embedding-only caching can be unsafe, though. For example, **"What is a binary tree?"** and **"What is a binary search tree?"** may have high vector similarity while requiring different answers.
+Although the wording is different, both questions ask for essentially the same information.
 
-This project combines **vector retrieval** with **answer-aware validation** to pursue both cache reuse and correctness.
+A traditional cache would treat them as separate requests, potentially triggering two LLM generations.
 
-## Key features
+Semantic Cache instead:
 
-- **Redis vector search:** 768-dimensional `FLOAT32` embeddings, cosine distance, and up to three nearest cache candidates (`KNN 3`).
-- **Hybrid matching:** Exact normalized question reuse, known technical-term conflict checks, and Gemini-based answer sufficiency checks for unresolved candidates.
-- **Safety-first fallback:** If no candidate is verified, generate a fresh answer rather than blindly reusing a similar response.
-- **Bounded validation:** A two-second total selection budget with timeout handling for external validation. The selection deadline does not guarantee that all underlying network work is cancelled.
-- **Distributed coordination:** Redis `SET NX PX` locks, token-checked Lua release/renewal, and ownership-checked writes reduce duplicate generation during concurrent requests.
-- **Fault tolerance:** Redis or embedding failures can fall back to direct answer generation; API failures are reported.
-- **Expiration:** Cached answers expire after 24 hours (86,400 seconds).
-- **Observability:** Request counts, hits/misses, response-time averages, Gemini generation calls, failure counts, and observed hit/miss latency ratio.
-- **Dashboard:** React dashboard with charts, periodic analytics refresh, connection feedback, and an API Playground.
-- **API protection:** Question validation, JSON body limits, request rate limiting, and admin-key protection for administrative routes.
-- **Tests:** 64 backend automated tests passing in the latest reported full run.
+1. Converts the question into a vector embedding.
+2. Searches Redis for semantically similar cached questions.
+3. Evaluates the similarity and validates candidate answers.
+4. Returns a suitable cached answer or generates a new one using Groq.
+5. Stores newly generated answers for future reuse.
 
-## Technology stack
+This helps reduce unnecessary LLM requests while prioritizing answer correctness.
 
-| Layer | Technology |
-| --- | --- |
-| Backend | Node.js, Express.js |
-| Vector store and coordination | Redis with Search/vector indexing, Redis hashes and Lua scripts |
-| Embeddings and generation | Google Gemini API |
-| Optional answer validator | Gemini Flash Lite model (model ID configurable) |
-| Frontend | React, Vite, Tailwind CSS, Recharts |
-| Testing | Node.js built-in test runner and module mocks |
+---
 
-## Architecture
+## Key Features
 
-```mermaid
-flowchart TD
-    A[Incoming question] --> B[Validate input]
-    B --> C[Generate 768-d embedding]
-    C --> D[Redis KNN 3 search]
-    D --> E{Exact normalized match?}
-    E -- Yes --> H[Return cached answer]
-    E -- No --> F{Known technical conflict?}
-    F -- Yes --> I[Skip candidate]
-    F -- No --> G[Answer-aware validator with deadline]
-    G -- Accepted --> H
-    G -- Rejected or unavailable --> I
-    I --> J{More candidates?}
-    J -- Yes --> E
-    J -- No --> K[Acquire or wait for Redis lock]
-    K --> L[Generate answer with Gemini]
-    L --> M[Store with lock ownership check and 24h TTL]
-    M --> N[Return fresh answer]
-    C -. Embedding failure .-> L
-    D -. Redis failure .-> L
-    H --> O[Update analytics]
-    N --> O
+### 1. Semantic Vector Search
+
+- Generates 768-dimensional embeddings using Hugging Face MPNet.
+- Uses Redis vector search with cosine similarity.
+- Retrieves the top three nearest cached candidates.
+- Supports semantic matching across differently worded questions.
+
+### 2. Local Embedding Generation
+
+- Uses `Xenova/all-mpnet-base-v2`.
+- Runs inference locally inside the Node.js backend.
+- Avoids external embedding API calls.
+- Reuses the loaded model for subsequent requests.
+
+### 3. Answer-Aware Validation
+
+High vector similarity does not always mean two questions have the same answer.
+
+The system uses additional validation and technical conflict checks to reduce incorrect cache hits.
+
+### 4. Distributed Locking
+
+- Implements Redis-based distributed locks.
+- Helps prevent duplicate LLM generation for concurrent requests.
+- Uses atomic lock operations to coordinate cache updates.
+- Includes lock release and bounded waiting behavior.
+
+### 5. Fault-Tolerant Architecture
+
+- Supports fallback behavior when Redis or caching operations fail.
+- Handles external API failures.
+- Includes request error handling and rate limiting.
+
+### 6. Cache Expiration
+
+- Supports TTL-based expiration.
+- Prevents cached entries from remaining indefinitely.
+- Provides cache deletion functionality.
+
+### 7. Real-Time Analytics Dashboard
+
+The React dashboard tracks:
+
+- Total requests
+- Cache hits and misses
+- Cache-hit rate
+- Average response latency
+- Cache-hit versus cache-miss latency
+- LLM API calls
+- Observed caching speedup
+
+### 8. Interactive API Playground
+
+- Submit questions directly from the dashboard.
+- View generated or cached answers.
+- Inspect cache-hit status and similarity scores.
+
+---
+
+## Tech Stack
+
+| Category             | Technologies                 |
+| -------------------- | ---------------------------- |
+| Backend              | Node.js, Express.js          |
+| Frontend             | React, Vite, Tailwind CSS    |
+| Analytics            | Recharts                     |
+| Database             | Redis Cloud                  |
+| Vector Search        | Redis Search                 |
+| Embeddings           | Hugging Face Transformers.js |
+| Embedding Model      | `Xenova/all-mpnet-base-v2`   |
+| Embedding Dimensions | 768                          |
+| LLM Provider         | GroqCloud                    |
+| LLM Model            | `openai/gpt-oss-20b`         |
+| Backend Hosting      | Render                       |
+| Frontend Hosting     | Vercel                       |
+| Testing              | Node.js Test Runner          |
+
+---
+
+## System Architecture
+
+```text
+                     User Question
+                           |
+                           v
+                   Express.js API
+                           |
+                           v
+                  Local MPNet Model
+                   768D Embedding
+                           |
+                           v
+                   Redis Vector Search
+                           |
+                           v
+                    Top-K Candidates
+                           |
+                           v
+                Similarity & Validation
+                           |
+                +----------+----------+
+                |                     |
+                v                     v
+            Cache Hit             Cache Miss
+                |                     |
+                v                     v
+         Cached Response       Distributed Lock
+                |                     |
+                |                     v
+                |               Groq LLM API
+                |                     |
+                |                     v
+                |             Generate New Answer
+                |                     |
+                |                     v
+                |              Store in Redis
+                |                     |
+                +----------+----------+
+                           |
+                           v
+                    Return Response
+                           |
+                           v
+                    Update Analytics
 ```
 
-The initial cache lookup can use answer-aware validation. Subsequent lock-wait, post-lock and pre-storage checks use conservative exact normalized matches, avoiding repeated validator calls in the retry loop.
+---
 
-### Redis index
+## Redis Vector Configuration
 
-- Index: `idx:semantic_cache`
-- Cache key prefix: `cache:`
-- Fields: `question` (TEXT), `answer` (TEXT), `embedding` (VECTOR)
-- Vector format: `FLOAT32`, 768 dimensions, cosine distance
-- Candidate retrieval: `KNN 3`; candidate threshold: similarity >= `0.90`
-- TTL: `86400` seconds
+The active local embedding index uses:
 
-**Note:** Vector similarity is a retrieval signal, not proof that two cached answers are interchangeable.
+| Property        | Value                      |
+| --------------- | -------------------------- |
+| Index name      | `idx:semantic_cache_mpnet` |
+| Key prefix      | `mpnet:cache:`             |
+| Vector type     | FLOAT32                    |
+| Dimensions      | 768                        |
+| Distance metric | COSINE                     |
+| Index algorithm | FLAT                       |
+| Embedding model | MPNet                      |
 
-## Run locally
+The original Gemini-based index is maintained separately as `idx:semantic_cache`.
 
-### Requirements
+**Important:** Embeddings from different models cannot be mixed, even if they have identical dimensions. Separate namespaces prevent incompatible vectors from being searched together.
 
-- Node.js and npm
-- A Redis instance with vector-search support (for example, a compatible Redis Cloud database)
-- Gemini API credentials with access to the configured models
+---
 
-### 1. Clone and install
+## Getting Started
+
+### Prerequisites
+
+Install or configure:
+
+- Node.js
+- npm
+- Redis with vector-search support, or Redis Cloud
+- Groq API key
+
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/himanshubansal858/semantic-cache.git
 cd semantic-cache
-npm install
-cd dashboard
-npm install
-cd ..
 ```
 
-### 2. Configure the backend
+### 2. Install backend dependencies
 
-Create a `.env` file in the **project root** using the variable names expected by your local configuration in `src/config/redis.js`, embedding service, and LLM service.
-
-The answer-aware validator expects the following environment variables:
-
-```dotenv
-GEMINI_API_KEY=your_gemini_api_key
-VALIDATOR_GEMINI_MODEL=gemini-3.5-flash-lite
+```bash
+npm install
 ```
 
-Your backend also needs its Redis connection settings and the admin API key if administrative routes are enabled. **Check the actual variable names in `src/config/redis.js` and `src/middleware/adminAuth.js` before configuring them**; they are intentionally not guessed here.
+### 3. Configure environment variables
 
-Never commit `.env`, tokens, or Redis credentials. An `.env.example` containing placeholder values is recommended.
+Create a `.env` file in the project root:
 
-### 3. Run the backend
+```env
+PORT=5000
+NODE_ENV=development
 
-From the project root:
+REDIS_URL=your_redis_connection_url
+
+GROQ_API_KEY=your_groq_api_key
+GROQ_MODEL=openai/gpt-oss-20b
+
+EMBEDDING_PROVIDER=local
+
+ADMIN_API_KEY=your_admin_api_key
+```
+
+Never commit your actual API keys or Redis credentials.
+
+### 4. Start the backend
 
 ```bash
 npm run dev
 ```
 
-The API is expected at `http://127.0.0.1:5000` in the current development setup.
+The backend runs locally at:
 
-On Windows PowerShell, use `npm.cmd run dev` if the `npm.ps1` execution policy blocks `npm`.
+`http://localhost:5000`
 
-### 4. Run the dashboard
+The first embedding request may download and initialize the local MPNet model.
 
-In another terminal:
+### 5. Start the frontend
+
+Open another terminal:
 
 ```bash
 cd dashboard
+npm install
 npm run dev
 ```
 
-Open the URL printed by Vite (typically `http://localhost:5173`). The dashboard requires the backend to be running for live analytics. If the backend is stopped, it may display the last fetched metrics and an "Analytics API unavailable" warning.
+Open the local URL displayed by Vite.
 
-## API examples
+---
 
-### Ask a question
+## API Endpoints
 
-`POST /api/ask`
+### Ask a Question
 
-```bash
-curl -X POST http://127.0.0.1:5000/api/ask \
-  -H 'Content-Type: application/json' \
-  -d '{"question":"What is a binary search tree?"}'
+**POST `/api/ask`**
+
+Request:
+
+```json
+{
+  "question": "What is Redis?"
+}
 ```
 
-**Example cache-hit response** (illustrative):
+Example response on a cache miss:
 
 ```json
 {
   "success": true,
-  "question": "What is a binary search tree?",
-  "answer": "A binary search tree is ...",
+  "question": "What is Redis?",
+  "answer": "Redis is an in-memory data store...",
   "cache": {
-    "hit": true,
-    "similarity": 0.99,
-    "redisAvailable": true
+    "hit": false,
+    "stored": true,
+    "redisAvailable": true,
+    "message": "Answer generated and stored in cache"
   }
 }
 ```
 
-Cache-miss responses may include `cache.stored` and a status message. Exact fields can vary by outcome.
+Example cache-hit information:
 
-### Fetch analytics
-
-`GET /api/analytics`
-
-```bash
-curl http://127.0.0.1:5000/api/analytics
+```json
+{
+  "hit": true,
+  "similarity": 1.0,
+  "redisAvailable": true
+}
 ```
 
-Administrative cache deletion and analytics-reset operations require the configured admin key; consult the backend routes for the exact paths and headers.
+### Get Analytics
 
-## Observed results
+**GET `/api/analytics`**
 
-The latest **development dashboard snapshot** supplied during testing showed:
+Returns statistics about cache usage, response times, and LLM calls.
 
-| Metric | Value |
-| --- | ---: |
-| Total requests | 34 |
-| Cache hits | 17 |
-| Cache misses | 17 |
-| Cache hit rate | 50.00% |
-| Gemini generation calls (reported) | 16 |
-| Failed requests | 2 |
-| Observed average miss/hit latency ratio | 38.94x |
+The dashboard consumes this endpoint to display real-time analytics.
 
-**Interpretation:** These are cumulative development metrics, not a controlled benchmark or guaranteed production speedup. They can include earlier code versions and different question lengths, model response times, retries, and network conditions. The `geminiCalls` metric may not include answer-validation API calls.
+---
 
-### Validation experiments
+## Performance
 
-| Experiment | Observed result | Caveat |
-| --- | --- | --- |
-| Embedding similarity threshold | 60% accuracy on 10 labeled pairs | False positives on related concepts |
-| Local duplicate-question cross-encoder | 50% accuracy on 16 technical pairs | Failed to identify positive paraphrases |
-| Bidirectional NLI | 66.67% accuracy on a 12-pair held-out set | Two false positives |
-| Gemini answer-aware validator | 8/8 correct on eight offline answer-sufficiency examples | Very small, non-independent sample; mean ~753 ms per validation |
+Semantic Cache is designed to reduce redundant LLM inference by serving previously validated answers.
 
-A live paraphrase (BST question phrased differently) returned a cache hit with ~0.966 similarity and ~3.48 s end-to-end latency. A separate binary-tree question did **not** reuse a BST-specific response and instead generated a new answer. These are individual observed cases, not broad correctness guarantees.
+During local testing, the MPNet embedding model produced 768-dimensional vectors with the following observed timings:
 
-### Concurrency observation
+| Measurement                          |      Time |
+| ------------------------------------ | --------: |
+| First embedding after initialization | 787.72 ms |
+| Warm embedding 1                     |  18.03 ms |
+| Warm embedding 2                     |  10.34 ms |
+| Warm embedding 3                     |  14.26 ms |
+| Average warm embedding time          |  14.21 ms |
 
-In a two-request fresh-question test, **one answer generation** was recorded. One request generated and stored its response; the other received HTTP `503` after its bounded lock wait expired because generation was slow. This supports duplicate-generation prevention in that test, but **does not mean both concurrent requests always succeed**.
+Local testing also showed stable memory usage:
 
-## Testing and build
+| Measurement                    | RSS Memory |
+| ------------------------------ | ---------: |
+| Before model initialization    |   63.20 MB |
+| After model initialization     |  226.19 MB |
+| After 20 sequential embeddings |  224.73 MB |
 
-Run the backend test suite:
+These figures come from development measurements rather than controlled production benchmarks.
+
+Actual performance depends on server resources, traffic patterns, model initialization, cache contents, and LLM response times.
+
+The deployed analytics dashboard continuously calculates cache-hit rates and observed latency differences.
+
+---
+
+## Testing
+
+The project includes automated backend tests covering caching behavior, validation, and reliability.
+
+Run:
 
 ```bash
 node --experimental-test-module-mocks --test
 ```
 
-Latest reported full regression result: **64 passed, 0 failed**.
+The backend test suite has previously passed **64 automated tests**.
 
-Run the frontend quality checks:
+Additional manual verification has covered:
 
-```bash
-cd dashboard
-npm run lint
-npm run build
-```
+- Cache misses and answer storage
+- Exact cache hits
+- Semantic cache retrieval
+- Redis vector index initialization
+- Distributed locking
+- Groq answer generation
+- Local MPNet embedding generation
+- Production API integration
 
-Both passed in the latest reported build. Vite emitted a non-blocking warning about a JavaScript chunk larger than 500 kB (approximately 646 kB before gzip, 190 kB gzipped).
+---
 
-The `evaluation/` folder contains experiments and benchmarks. Some scripts make real Gemini API calls and consume quota; review their model and API configuration before running them.
+## Deployment
 
-## Design choices and limitations
+The application uses a split deployment architecture.
 
-1. **Answer correctness:** A retrieved question may be semantically close yet require a different answer. The hybrid validator reduces some known false positives but is not infallible.
-2. **Exact-match trust:** Exact normalized matches bypass answer sufficiency verification, assuming the cached answer was acceptable when stored.
-3. **Candidate coverage:** `KNN 3` can miss an appropriate answer that is not among the nearest three results. It is not a guaranteed exact-key lookup.
-4. **Model latency and quota:** Answer-aware checks introduce external network calls. They may time out or fail closed, converting potentially reusable answers into misses.
-5. **Timeout semantics:** A selector deadline stops waiting, but does not necessarily terminate server-side provider work.
-6. **Concurrency:** Lock wait is bounded; callers can receive `503` while another request is still generating an answer.
-7. **Measurement:** Dashboard data reflects development traffic rather than a standardized load test. Cached responses and model outputs should not be assumed correct for all inputs.
+### Backend — Render
 
-## Future improvements
+The Express backend runs on Render and handles:
 
-- A dedicated normalized-question key for reliable exact lookup and deduplication.
-- Larger, independently labeled answer-reuse evaluation sets and calibration.
-- An optional request-status or job polling endpoint for slow generations.
-- Tighter instrumentation separating validation API calls from generation calls.
-- Frontend code splitting and controlled end-to-end latency/load benchmarks.
+- API requests
+- Local embedding inference
+- Redis vector search
+- Cache validation
+- Groq LLM requests
+- Distributed locking
+- Analytics
 
-## Repository
+**Backend URL:** [https://semantic-cache-api-xlem.onrender.com](https://semantic-cache-api-xlem.onrender.com)
 
-[GitHub — himanshubansal858/semantic-cache](https://github.com/himanshubansal858/semantic-cache)
+### Frontend — Vercel
+
+The React dashboard is deployed on Vercel.
+
+**Frontend URL:** [https://semantic-cache-self.vercel.app](https://semantic-cache-self.vercel.app)
+
+### Redis Cloud
+
+Redis Cloud stores:
+
+- Cached questions and answers
+- Vector embeddings
+- Distributed locks
+- Analytics counters
+
+### Deployment Considerations
+
+- Local MPNet inference consumes server memory.
+- Cold starts may require model initialization or downloading model files.
+- Groq usage remains subject to account and model-specific rate limits.
+- The public demo uses rate limiting to reduce abusive traffic.
+
+---
+
+## Engineering Challenges
+
+### Preventing Incorrect Cache Hits
+
+A high cosine similarity score does not guarantee that two questions are equivalent.
+
+Answer-aware validation and technical conflict checks help reduce false-positive cache matches.
+
+### Handling Concurrent Requests
+
+Without coordination, simultaneous requests for the same uncached question may trigger duplicate LLM calls.
+
+Redis distributed locking helps coordinate these requests and reduce redundant generation.
+
+### Reducing External API Dependencies
+
+The initial implementation used hosted embeddings.
+
+The project was later migrated to local MPNet embeddings, eliminating external embedding API calls from the active local-embedding configuration.
+
+### Managing Failure Scenarios
+
+The backend includes fallback logic and error handling to support continued operation when parts of the caching infrastructure are unavailable.
+
+---
+
+## Future Improvements
+
+- Global daily LLM request budgeting
+- More extensive performance benchmarking
+- P95 and P99 latency monitoring
+- Additional embedding model benchmarking
+- Improved cache invalidation strategies
+- Production monitoring and alerting
+- Model preloading and cold-start optimization
+
+---
+
+## Author
+
+**Himanshu Bansal**
+
+GitHub: [https://github.com/himanshubansal858](https://github.com/himanshubansal858)
+
+---
+
+If you find this project useful, consider giving the repository a star!
